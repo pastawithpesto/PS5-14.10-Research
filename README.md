@@ -42,6 +42,66 @@ Ivan Milinski · Felix Dietz · Brian Alejandro Camacho · Jonathan Moreau · Fr
 
 ---
 
+## WebKit Source-Level Vulnerability Research (WK-1200)
+
+Independent source analysis and device testing of WebKit-1200 (the PS5 14.10 WebView engine). All bugs found through manual source auditing of the WebKit-1200 tree against the PS5's specific build configuration (LLInt-only, no JIT, Gigacage disabled, FreeBSD/libpas).
+
+| # | Bug | Severity | Status | Finding |
+|---|-----|----------|--------|---------|
+| 1 | **CVE-2026-64784 — MetadataTable integer overflow** | Critical | **ALIVE** | [F83](docs/FINDINGS.md#finding-83) |
+| 2 | structuredCloneForStream RAB IDL bypass | High | Blocked (mmap zero-fill) | [F84](docs/FINDINGS.md#finding-84) |
+| 3 | RAB byteLength inversion | Medium | Blocked (downstream guards) | [F85](docs/FINDINGS.md#finding-85) |
+| 4 | RAB TOCTOU race | Medium | Blocked (per-element bounds) | [F86](docs/FINDINGS.md#finding-86) |
+| 5 | ClonedArgs butterfly UAF | High | Blocked (conservative GC) | [F87](docs/FINDINGS.md#finding-87) |
+| 6 | Auxiliary cell non-tracing | Medium | Real — enables type confusion | [F88](docs/FINDINGS.md#finding-88) |
+| 7 | CSSFontFaceSet iterator UAF | High | Not triggerable (event absent) | [F89](docs/FINDINGS.md#finding-89) |
+| 8 | Font loca OOB read | Medium | Mitigated (renderer validates) | [F90](docs/FINDINGS.md#finding-90) |
+| 9 | BYOB stream prototype poison | Medium | API absent on target | [F91](docs/FINDINGS.md#finding-91) |
+| 10 | Stream Tee OOB via RAB resize | Medium | Blocked (bounds + IDL) | [F92](docs/FINDINGS.md#finding-92) |
+
+**CVE-2026-64784** is the primary exploit path. Device-confirmed corruption: JSString `.length=81700`, all characters `'A'`, metadata-only corruption in 14/14 runs. Exploitation in progress — requires reading sweep data from the corrupted JSString metadata path.
+
+### 14.10 WebView API Availability (device confirmed)
+
+**Available:** `structuredClone`, `MessageChannel`, `Canvas 2D`, `SVG`, `Custom Elements`, `Shadow DOM`, `MutationObserver`, `Workers` (Blob URL), `FontFace`, `WebSocket`, `SubtleCrypto`, `Proxy`, `eval`, `BigInt`, `ResizableArrayBuffer`, `WeakRef`, `FinalizationRegistry`, `Streams API` (partial)
+
+**NOT available:** `WASM`, `SharedArrayBuffer`, `WebGL`, `Web Audio`, `IndexedDB`, `XSLT`, `ServiceWorker`, `ReadableByteStreamController`
+
+---
+
+## LAN Research & Network Surface
+
+Independent network research on PS5 firmware 14.10, including full port audits, service identification, and LAN infrastructure tools.
+
+### Network Findings
+
+| Finding | Details |
+|---------|---------|
+| **Port 41800 = Spotify Connect ZeroConf** | 5-phase identification — not in any published PS5 port map prior to this research ([F93](docs/FINDINGS.md#finding-93)) |
+| **Full 65535-port audit** | Only 9295/tcp (Remote Play) and 41800/tcp (Spotify) open on stock 14.10 ([F94](docs/FINDINGS.md#finding-94)) |
+| **PUP/SLB2 container parse** | Full structural analysis of PS5 firmware update format ([F96](docs/FINDINGS.md#finding-96)) |
+
+### LAN Research Tools
+
+| Tool | Purpose |
+|------|---------|
+| `tools/probe41800.py` | Phase 1 HTTP verb/path probe on port 41800 |
+| `tools/probe41800_spotify.py` | Spotify Connect ZeroConf protocol probe |
+| `tools/probe41800_phase2.py` | Protocol fingerprinting (TLS, binary, mDNS, WebSocket) |
+| `tools/probe41800_phase3.py` | HTTP variant probing (keep-alive, no-Host, paths) |
+| `tools/probe41800_phase4.py` | Method/format enumeration |
+| `tools/probe41800_phase5.py` | Command brute-force (96 protocol words) |
+| `tools/dns_serve.py` | DNS interceptor with EDNS/TC/TCP support |
+| `tools/dhcp_serve.py` | RFC 2131 DHCP responder |
+| `tools/chaos_dns.py` | 7-variant malformed DNS response battery |
+| `tools/ps5_recon.sh` | 505-line LAN enumeration (nmap/arp/DDP) |
+| `tools/hid_navigate.py` | USB HID keyboard emulation for headless PS5 navigation |
+| `tools/hid_send_kb.py` | Standalone HID sender with inline sequence |
+
+All tools use `argparse` with `--ps5-ip` (required) and stdlib-only Python.
+
+---
+
 **Contributors welcome.** Whether you have the hardware or just want to analyze FreeBSD kernel code - there's work to do. See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.
 
 <!-- RESEARCH_PROGRESS:START -->
@@ -310,8 +370,11 @@ See [docs/USERLAND_ENTRY.md](docs/USERLAND_ENTRY.md) for the full setup guide, s
 - Kernel offsets (fw 1.00-10.01): [@hammer-83](https://github.com/hammer-83) via [ps5-jar-loader](https://github.com/hammer-83/ps5-jar-loader)
 - PS4 jailbreak: [GoldHEN](https://github.com/GoldHEN/GoldHEN) by [@SiSTRo](https://github.com/SiSTRo) and the GoldHEN team
 - Save file management: [Apollo Save Tool](https://github.com/bucanero/apollo-ps4) by [@bucanero](https://github.com/bucanero)
+- 13.60 kernel binary dumps and Lua probe loader: [@ZigZagBoi1](https://github.com/ZigZagBoi1) — RE analysis (145/145 handlers) by [@pastawithpesto](https://github.com/pastawithpesto)
 - Relapse exploit research (fw 7.00-13.60): AF_ROUTE KASLR defeat technique and AIO race condition methodology
 - Artemis engine Lua research: the PS5 homebrew scene
+- WebKit-1200 source analysis and CVE-2026-64784: [@pastawithpesto](https://github.com/pastawithpesto)
+- LAN research tools and network surface mapping: [@pastawithpesto](https://github.com/pastawithpesto)
 
 ## License
 

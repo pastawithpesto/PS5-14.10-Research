@@ -1115,3 +1115,191 @@ Write+restore cycles take 0.0001s each (10 cycles in 0.0007s). All functions res
 **Impact:** A/B provide discriminating output consistent with controlled redirection to selected existing Lua C functions. Later 56f also records string.len/math.abs target-like values and restoration. The 111606/111610 56c files are byte-identical captures, not independent replications. The 56e gadget experiments record nil returns; they do not establish a working general ROP chain. Arbitrary native targets, machine-register argument control, injected-page execution and kernel access do not follow from these records. See [the hash-pinned ledger guide](RESEARCH_EVIDENCE.md).
 
 ---
+
+## Finding 83: WebKit MetadataTable Integer Overflow — CVE-2026-64784 (source analysis + device confirmed)
+
+**Source:** `UnlinkedMetadataTable.cpp:99-164` (WebKit-1200)
+
+`UnlinkedMetadataTable::finalize()` uses an `unsigned` accumulator without `CheckedArithmetic`. When a function contains ~38.3M `op_call` entries (`ceil(2^32 / 112)`), `totalSize()` wraps to ~100KB → `link()` allocates an undersized buffer → `finishCreation()` writes 4.3GB forward OOB during compilation.
+
+Key facts:
+- Stride is 112 bytes (OpCall::Metadata: BaselineCallLinkInfo 72B + ArrayProfile 12B + padding 4B + ValueProfile 24B)
+- MetadataTableMalloc = FastMalloc (not IsoHeap) — same allocator namespace as ArrayBuffer backing stores (Gigacage disabled on FreeBSD)
+- Both route through libpas bmalloc marge bitfit tier (4MB pages, ~100KB allocations)
+- MADV_FREE preserves virtual mappings + BUSE_RELEASE_LARGE_FREE=0 → sweep writes to decommitted-but-mapped pages without SIGSEGV
+
+Device test results:
+- V373: JSString corruption confirmed 14/14 runs — `.length=81700`, all characters `'A'` (metadata-only corruption, sweep overwrites JSString.m_fiber not StringImpl data)
+- V377: Full character scan confirms ALL 81700 chars are `'A'` — zero sweep data readable in character buffer
+- V142: COMPILED-OK → GROOM-DONE → CALLING → SIGSEGV (first successful compile on device)
+- V149g: Zero corruption when targets at LOWER addresses (forward-only sweep proven)
+
+**Status:** ALIVE. Exploitation requires reading sweep data from corrupted JSString metadata path, not from character content.
+
+---
+
+## Finding 84: structuredCloneForStream RAB IDL Bypass (source analysis + device confirmed)
+
+**Source:** WebCore IDL converters, `structuredCloneForStream` implementation (WebKit-1200)
+
+ALL WebCore APIs reject resizable ArrayBuffer views at `toWrapped()` — the IDL converter checks `isResizableOrGrowableSharedBuffer()` and throws TypeError. However, `structuredCloneForStream` bypasses these IDL converters entirely, operating directly on the buffer.
+
+Device test V330 confirmed: stale metadata reads occur when a ResizableArrayBuffer is resized after being passed to `structuredCloneForStream`. However, mmap zero-fill on the PS5 blocks info leak from the stale region.
+
+V345 follow-up: JS-visible `.length=0` after resize — proper bounds check at the JS level prevents OOB access.
+
+**Status:** Real spec-level gap. Blocked on this target by mmap zero-fill and JS bounds checks.
+
+---
+
+## Finding 85: RAB byteLength Inversion (source analysis)
+
+**Source:** ResizableArrayBuffer implementation (WebKit-1200)
+
+An inverted OOB check exists in the source: the comparison tests the wrong direction, which would allow reads/writes past the current byteLength up to maxByteLength. However, every downstream sink (SubtleCrypto, TextDecoder, etc.) has its own correct length validation guard, so no memory safety impact is reachable.
+
+**Status:** Real source bug, all exploitation paths blocked by downstream guards.
+
+---
+
+## Finding 86: RAB TOCTOU Race (source analysis)
+
+**Source:** TypedArray `set()` implementation (WebKit-1200)
+
+A time-of-check/time-of-use race exists between `set()`'s initial bounds validation and the per-element copy loop when a ResizableArrayBuffer is concurrently resized. However, the per-element copy has its own `inBounds()` check that re-validates `bufferByteLength` on each iteration, preventing any out-of-bounds write.
+
+**Status:** Real TOCTOU window, mitigated by per-element bounds checking. No memory safety impact.
+
+---
+
+## Finding 87: ClonedArgs Butterfly UAF (source analysis)
+
+**Source:** `ClonedArguments::createWithInlineFrame()` (WebKit-1200)
+
+A real use-after-free path exists through the butterfly (backing store) of ClonedArguments objects when propertyCapacity is manipulated to trigger reallocation. However, conservative GC scanning on the PS5 build pins the butterfly cell absolutely — the conservative scanner treats any stack/register value that looks like a heap pointer as a root, preventing the cell from being reclaimed. All 9 bypass angles exhausted (corruption, V240/V241 CORRUPT-0 confirmed).
+
+**Status:** Real UAF mechanism, blocked by conservative GC scanning. Absolute wall.
+
+---
+
+## Finding 88: Auxiliary Cell Non-Tracing (source analysis)
+
+**Source:** Conservative GC implementation (WebKit-1200)
+
+While conservative GC scanning pins butterfly cells (preventing reclaim), it does NOT trace the JSValue contents stored inside those cells. This means a victim object whose only reference is through a pinned-but-untraced auxiliary cell CAN be collected by the GC, even though the cell itself stays alive. This enables a type confusion primitive: the cell survives, its JSValue slots become dangling, and a new object allocated in the same slot is accessed through the old type's layout.
+
+**Status:** Real. Enables victim collection for type confusion, complementary to the MetadataTable overflow.
+
+---
+
+## Finding 89: CSSFontFaceSet Iterator UAF (source analysis)
+
+**Source:** `CSSFontFaceSet.h:88`, `CSSFontFaceSet.cpp:381,428` (WebKit-1200)
+
+CSSFontFaceSet stores `Vector<std::reference_wrapper<CSSFontFace>>` (non-owning references). Upstream fixed this to `Ref<CSSFontFace>`. On WK-1200, removing a FontFace during iteration would create a dangling reference_wrapper. The trigger requires JS re-entry during the `loadingdone` event dispatch.
+
+However, on PS5 14.10 WebKit, the `loadingdone` event is not dispatched — no JS re-entry occurs during font state transitions. MutationObserver and ResizeObserver callbacks also do not fire during the critical window.
+
+**Status:** Real source bug (fixed upstream), not triggerable on this build.
+
+---
+
+## Finding 90: Font loca OOB Read (source analysis + device confirmed)
+
+**Source:** Font rendering pipeline (WebKit-1200 → FreeType)
+
+Malformed loca table offsets can point outside the glyf table, causing an out-of-bounds read during glyph rendering. On desktop browsers this can leak heap data.
+
+Device test V260 confirmed: PS5 renderer validates loca offsets before use. All OOB offsets produce the `.notdef` fallback glyph instead of reading out-of-bounds memory.
+
+**Status:** Real OOB vector, fully mitigated by PS5 renderer validation.
+
+---
+
+## Finding 91: BYOB Stream Prototype Poison (source analysis)
+
+**Source:** ReadableByteStreamController (WebKit-1200)
+
+A prototype pollution vector exists through BYOB (Bring Your Own Buffer) readable streams that could corrupt the internal buffer state.
+
+However, PS5 14.10 WebKit does not implement `ReadableStream` with `type: "bytes"` at all — the constructor throws. This API is confirmed absent via device testing.
+
+**Status:** Real vector, API not available on target.
+
+---
+
+## Finding 92: Stream Tee OOB via RAB Resize (source analysis)
+
+**Source:** ReadableStream `tee()` implementation (WebKit-1200)
+
+When a `tee()`'d stream carries chunks backed by a ResizableArrayBuffer, concurrent resize during the branch copy could cause OOB access. However, the per-element `inBounds()` check validates `bufferByteLength` on each copy, and the IDL converters reject RAB views at the WebCore boundary.
+
+**Status:** Real OOB path, blocked by both per-element bounds and IDL rejection.
+
+---
+
+## Finding 93: Port 41800 Identified as Spotify Connect ZeroConf (LAN research)
+
+**Source:** Direct device probing (5-phase HTTP/protocol audit)
+
+Port 41800/tcp on stock PS5 firmware is a Spotify Connect ZeroConf API endpoint. Identified through systematic probing:
+- Phase 1: Standard HTTP verbs → 0 bytes / silent close
+- Phase 2: Spotify ZeroConf `?action=getInfo` → HTTP 200, JSON response: `remoteName=PS5-277`, `deviceType=GAMECONSOLE`, `version=2.7.1`, `availability=SYSTEM-UPD-REQ`
+- Phases 3-5: Protocol fingerprinting, HTTP variants, command brute-force
+
+Not present in any published PS5 port map prior to this research.
+
+**Status:** Confirmed. Read-only information endpoint, no demonstrated upload/exec path.
+
+---
+
+## Finding 94: Full 65535-Port Device Audit (LAN research)
+
+**Source:** Two complete TCP connect scans + DDP/UDP probes on stock 14.10
+
+Full port surface of a stock PS5 on firmware 14.10:
+- **9295/tcp**: Remote Play HTTP stack — `403 Forbidden` without registration
+- **41800/tcp**: Spotify Connect ZeroConf (see Finding 93)
+- **9302/udp**: DDP discovery — responds `200 Ok` with hostname, firmware version
+- All other 65533 TCP ports: refused or filtered
+
+No jailbreak indicators (2121/9021/8081 absent). Zero upload/write paths on stock firmware.
+
+---
+
+## Finding 95: 14.10 WebView API Availability Map (device confirmed)
+
+**Source:** Feature probing via WebKit remote loader on PS5 14.10
+
+**Available:** structuredClone, MessageChannel, Canvas 2D, SVG, Custom Elements, Shadow DOM, MutationObserver, Workers (Blob URL), FontFace, WebSocket, SubtleCrypto, Proxy, eval, BigInt, ResizableArrayBuffer, WeakRef, FinalizationRegistry, Streams API (partial)
+
+**NOT available:** WASM, SharedArrayBuffer, WebGL, Web Audio, IndexedDB, XSLT, ServiceWorker, ReadableByteStreamController
+
+Key implications for exploitation:
+- No WASM = no linear memory for shellcode staging
+- No SharedArrayBuffer = no shared-memory race conditions
+- ResizableArrayBuffer available = RAB-based vectors viable (see Findings 84-86, 92)
+- WeakRef + FinalizationRegistry = GC timing observability
+- Workers via Blob URL = concurrent execution (but no SharedArrayBuffer)
+
+---
+
+## Finding 96: PUP/SLB2 Firmware Container Structure (static analysis)
+
+**Source:** Structural parse of PS5 firmware update container
+
+Full structural analysis of the PUP (PlayStation Update Package) and SLB2 (Signed Loader Block 2) container format used by PS5 firmware updates. Documents entry layout, segment types, signature structure, and nested container relationships. Machine-readable entry data available in `docs/pup-slb2-entries.json`.
+
+---
+
+## Finding 97: FreeBSD Kernel CVE Candidates for 14.10 (source analysis)
+
+**Source:** Cross-reference of FreeBSD r230171 (PS5 14.10 kernel base) against public CVE database
+
+Top candidates identified:
+- **CVE-2024-43102** (umtx UAF, CVSS 10.0) — use-after-free in `_umtx_op`. Threading blocked on PS5 (Finding 2), but `umtx` syscall itself may be reachable via `make_syscall`
+- **CVE-2026-45251** (poll/select UAF) — use-after-free in file descriptor polling. Requires concurrent fd close, threading blocked but kqueue fd lifecycle may provide alternative trigger
+
+Both require further analysis against PS5's specific syscall filtering and sandbox restrictions.
+
+---
