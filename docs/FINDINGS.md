@@ -1303,3 +1303,102 @@ Top candidates identified:
 Both require further analysis against PS5's specific syscall filtering and sandbox restrictions.
 
 ---
+
+## Finding 98: ArrayBufferView Native Bounds Predicate Inversion (source audit)
+
+**Source:** WebKit-1200 source audit (Sol RAB review + manual verification)
+**Status:** REAL CODE BUG — blocked on target by IDL gate
+**File:** `Source/JavaScriptCore/runtime/ArrayBufferView.h:98,120`
+
+The native C++ `ArrayBufferView::byteOffset()` and `ArrayBufferView::byteLength()` methods for resizable buffers have an inverted OOB predicate. The condition `!(byteOffsetStart > bufferByteLength || byteOffsetEnd > bufferByteLength)` returns 0 when the view is **in-bounds** (should return the actual value) and returns the raw stale value when **out-of-bounds** (should return 0).
+
+Compare with the correct JSC-level check at `JSArrayBufferViewInlines.h:139` which correctly returns `true` for OOB views.
+
+**Why blocked:** `JSArrayBufferView::toWrapped()` at `JSArrayBufferViewInlines.h:97` rejects resizable views before they can reach WebCore native code paths (WebSocket.send, FontFace, BlobBuilder, FetchBody, etc.). No web-reachable caller of the buggy native methods was established for resizable views.
+
+**Impact if unblocked:** Native code paths (WebSocket send, Blob construction, Fetch body) would get stale offset/length for OOB resizable views, potentially causing OOB reads when sending data over WebSocket or constructing Blobs.
+
+---
+
+## Finding 99: Canvas INT_MIN Signed Overflow (source audit)
+
+**Source:** WebKit-1200 source audit (Sol DOM review)
+**Status:** C++ UB — no OOB write established
+**File:** `Source/WebCore/html/canvas/CanvasRenderingContext2DBase.cpp:2313,2418-2423,2472-2478`
+
+`createImageData(sw, sh)` calls `std::abs(sw)` which is undefined behavior for `INT_MIN` (-2147483648). Similarly, `getImageData` and `putImageData` have unchecked signed addition/negation with coordinates that accept INT_MIN through the IDL `long` type.
+
+**Why limited:** The downstream pixel allocation at `ImageData.cpp:39-44` uses `CheckedUint32` which catches overflow. `ByteArrayPixelBuffer.cpp:42-45` caps at INT32_MAX. No OOB write was established — the UB may cause incorrect dimensions but allocation guards prevent memory corruption.
+
+---
+
+## Finding 100: SerializedScriptValue ObjectReferenceTag Missing Bounds Check (source audit)
+
+**Source:** WebKit-1200 source audit (Sol DOM review + manual verification)
+**Status:** REAL DECODER BUG — not JS-reachable
+**File:** `Source/WebCore/bindings/js/SerializedScriptValue.cpp:4316-4321`
+
+The `ObjectReferenceTag` case in `readTerminal()` reads a pool index via `readConstantPoolIndex(m_gcBuffer)` and passes it to `m_gcBuffer.at(*index)` without bounds-checking against `m_gcBuffer.size()`. Compare with the string pool path at line 2950 which correctly checks `*index >= m_constantPool.size()`.
+
+When the gcBuffer exceeds 65535 entries (triggering uint32_t path at line 2879), a crafted index > INT_MAX converts to negative `int` at `MarkedVector::at(int i)` (ArgList.h:138), bypassing the `i >= m_size` guard (ArgList.h:141), causing `m_buffer[negative_index]` — an OOB read before the buffer.
+
+**Why not JS-reachable:** The serialized byte stream is generated internally by `CloneSerializer` which always writes valid indices. Exploiting this requires injecting crafted bytes into the serialized buffer, which needs a separate memory corruption primitive.
+
+---
+
+## Finding 101: JSArrayBufferPrototype resize() Unchecked Float Cast (source audit)
+
+**Source:** WebKit-1200 source audit (Sol RAB review)
+**Status:** C++ UNDEFINED BEHAVIOR — bounded by allocator
+**File:** `Source/JavaScriptCore/runtime/JSArrayBufferPrototype.cpp:287-289`
+
+`resize()` checks only finiteness and sign before `static_cast<size_t>` at line 289. A value like `Number.MAX_VALUE` or `2**64` exceeds `size_t` range, producing C++ undefined behavior before the maximum-length check in `ArrayBuffer.cpp:468`.
+
+**Why limited:** The UB occurs before the bounds check, but in practice most compilers saturate or wrap, and the subsequent `maxByteLength` comparison would reject the value. Also, `slice()` at line 168 narrows `size_t byteLength()` to 32-bit `unsigned`, causing incorrect output for 4GB+ buffers but no OOB copy (allocation guards catch it).
+
+---
+
+## Finding 102: FinalizationRegistry Stale Token Address Reuse (source audit)
+
+**Source:** WebKit-1200 source audit (Sol GC review)
+**Status:** SEMANTIC BUG — not memory safety
+**File:** `Source/JavaScriptCore/runtime/JSFinalizationRegistry.cpp:120-151,218-225`
+
+When a registered target is collected, its holdings move to `m_deadRegistrations` keyed by the unregister token's raw pointer. If the token is then collected and a new unrelated object is allocated at the same address, calling `unregister(newObject)` matches the old token's dead holdings by pointer identity and incorrectly removes them.
+
+**Why limited:** This is a logical/semantic bug (wrong unregister result and boolean return), not a memory safety issue. Sol confirms: "This finding does not establish a freed-cell dereference or partially-zeroed target exposure; the erroneous comparison is pointer identity."
+
+---
+
+## Finding 103: WebKit-1200 Source Audit Summary (combined Sol + Claude review)
+
+**Source:** Three-way parallel audit: Sol RAB review (123K tokens), Sol GC review (166K tokens), Sol DOM review (133K tokens), plus independent Claude verification of all findings
+
+**Audit scope:**
+- RAB/TypedArray: stale values, dangling backing store, IDL converter bypass, integer overflow
+- GC/lifecycle: missed tracing, WeakRef half-collected, Proxy trap structure, inline caches, Structure transitions
+- WebCore/DOM: FontFace parsing, Canvas arithmetic, Stream lifetimes, Worker postMessage, SerializedScriptValue deserialization
+
+**Results:**
+| Area | Verdict | Detail |
+|------|---------|--------|
+| RAB JS access paths | PASS | Dynamic bounds checks at every access point |
+| RAB IDL converters | PASS | toWrapped() rejects resizable at JSArrayBufferViewInlines.h:97 |
+| ArrayBufferView native bounds | **F98** | Inverted predicate, blocked by IDL gate |
+| Canvas pixel allocation | PASS | CheckedUint32 in ImageData.cpp:39-44 |
+| Canvas signed coordinates | **F99** | INT_MIN UB, allocation guards prevent OOB |
+| FontFace async lifetime | PASS | ActiveDOMObject + virtualHasPendingActivity |
+| Stream tee/pipe/cancel | PASS | JS builtins, GC at JS level |
+| Worker postMessage transfer | PASS | Atomic serialize-then-detach, dedup |
+| SerializedScriptValue strings | PASS | Pool index validated at line 2950 |
+| SerializedScriptValue objects | **F100** | Missing bounds check, not JS-reachable |
+| ArrayBuffer resize() cast | **F101** | Float→size_t UB, bounded by allocator |
+| FinalizationRegistry tokens | **F102** | Semantic bug, not memory safety |
+| WeakRef/cleanup | PASS | Correct sweep-before-allocate ordering |
+| Proxy trap lifetime | PASS | Synchronous with barriered fields |
+| Inline cache/metadata stale | PASS | Finalization clears dead refs (beyond known MetadataTable) |
+| Structure transitions | PASS | Barriered + locked bookkeeping |
+
+Five code-level bugs found (F98-F102), none currently exploitable from JS on the target. F98 (native bounds inversion) is the most dangerous latent bug — if the IDL gate were ever loosened, it would enable OOB reads via WebSocket/Blob/Fetch paths.
+
+---

@@ -58,6 +58,11 @@ Independent source analysis and device testing of WebKit-1200 (the PS5 14.10 Web
 | 8 | Font loca OOB read | Medium | Mitigated (renderer validates) | [F90](docs/FINDINGS.md#finding-90) |
 | 9 | BYOB stream prototype poison | Medium | API absent on target | [F91](docs/FINDINGS.md#finding-91) |
 | 10 | Stream Tee OOB via RAB resize | Medium | Blocked (bounds + IDL) | [F92](docs/FINDINGS.md#finding-92) |
+| 11 | ArrayBufferView native bounds inversion | Medium | Blocked (IDL gate) | [F98](docs/FINDINGS.md#finding-98) |
+| 12 | Canvas INT_MIN signed overflow | Low | UB, allocation guards catch | [F99](docs/FINDINGS.md#finding-99) |
+| 13 | SerializedScriptValue decoder OOB read | Medium | Not JS-reachable | [F100](docs/FINDINGS.md#finding-100) |
+| 14 | RAB resize() unchecked float cast | Low | Allocator bounds catch | [F101](docs/FINDINGS.md#finding-101) |
+| 15 | FinalizationRegistry token reuse | Low | Semantic only, not memory | [F102](docs/FINDINGS.md#finding-102) |
 
 **CVE-2026-64784** is the primary exploit path. Device-confirmed corruption: JSString `.length=81700`, all characters `'A'`, metadata-only corruption in 14/14 runs. Exploitation in progress — requires reading sweep data from the corrupted JSString metadata path.
 
