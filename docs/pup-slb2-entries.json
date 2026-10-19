@@ -1,0 +1,262 @@
+{
+  "artifact": "PS5UPDATE.PUP",
+  "parse_date": "2026-10-18",
+  "sha256": "c17384946df6e5c85b2d72cbeee2057b165bf90279d9e2a86d527d0778cdaaf6",
+  "md5": "f7853a0fa97a9a7828ac548798012782",
+  "sha1": "6fec57462c48557210170227cbe7e2f1c3872bb4",
+  "size": 1261408256,
+  "size_hex": "0x4B2F9000",
+  "magic": "SLB2",
+  "magic_hex_le_u32": "0x32424C53",
+  "version": 3,
+  "header_fields": {
+    "container_type": "BLS/SLB2 outer container (plaintext)",
+    "magic_offset": 0,
+    "magic_bytes_hex": "534c4232",
+    "version_offset": 4,
+    "version": 3,
+    "flags_offset": 8,
+    "flags": 65536,
+    "flags_hex": "0x00010000",
+    "flags_meaning": "[UNK] role per source bls.h is 'flags'; semantic bit meanings not documented",
+    "file_count_offset": 12,
+    "file_count": 1,
+    "block_count_offset": 16,
+    "block_count": 2463688,
+    "block_count_hex": "0x002597C8",
+    "block_size_bytes": 512,
+    "block_count_check": "block_count * 512 = 1261408256 = exact file size (PASS)",
+    "unknown_0x14_0x20_hex": "000000000000000000000000",
+    "bls_header_size_bytes": 32,
+    "entry_list_offset": 32,
+    "entry_list_offset_hex": "0x20",
+    "entry_record_size_bytes": 48,
+    "entry_table_capacity": 10,
+    "entry_table_area": "0x20-0x200",
+    "verified_region_note": "source/decrypt.c reads exactly the first 0x400 bytes and submits them to ioctl 0xC0104401 (VerifyBlsHeader); digest-like fields at 0x200 and 0x3E0 are inside that verified region"
+  },
+  "entry_count": 1,
+  "entries": [
+    {
+      "index": 0,
+      "id": null,
+      "id_source_note": "bls_entry struct (LightningMods/ps5-pup-decrypt include/bls.h) has no id field; the entry is identified by name",
+      "flags": null,
+      "flags_source_note": "bls_entry struct has no flags field (include/bls.h); container flags live in the 32-byte bls_header",
+      "block_offset": 2,
+      "offset": 1024,
+      "offset_hex": "0x400",
+      "offset_derivation": "block_offset * 512 (source/decrypt.c: input_base_offset = entry_list[i].block_offset * 512)",
+      "size": 1261406781,
+      "size_hex": "0x4B2F8A3D",
+      "reserved_hex": "0000000000000000",
+      "name": "PS5UPDATE1.PUP",
+      "name_field_offset": "0x30",
+      "name_field_size_bytes": 32,
+      "data_range_hex": "0x400-0x4B2F8E3D",
+      "sha256_head64": "f1bf51b3cb3538996d83b896b3d41bac8d52cb875fbb2eb3e1c794849dfb12c5",
+      "head64_hex": "5414f5ee1001013204000000b005e00d158bb56a2a445df287ca84a5bf96d4a360aa28676119e405982ff326a2915f28a83022da28cd72402fb4be29d55cf1c9"
+    }
+  ],
+  "digest_like_fields": [
+    {
+      "offset": 512,
+      "offset_hex": "0x200",
+      "length": 32,
+      "hex": "4c294437efcfa2b71856efd6a34f3f016929665d661fc34892c13d297f21cd03",
+      "role": "[UNK] 32-byte field inside console-verified BLS header; not a match for sha256 of any tested file region"
+    },
+    {
+      "offset": 992,
+      "offset_hex": "0x3E0",
+      "length": 32,
+      "hex": "ab52ba9e73e15573ca14ac47c312ae25e27f11472abd1959d4c4bda8a739a7fe",
+      "role": "[UNK] 32-byte field ending exactly at entry data start 0x400; not a match for sha256 of any tested file region"
+    }
+  ],
+  "inner_pup": {
+    "container": "encrypted PS5 PUP payload embedded in BLS entry 0 (plaintext file header only)",
+    "offset": 1024,
+    "offset_hex": "0x400",
+    "magic": "0xEEF51454",
+    "magic_bytes_hex": "5414f5ee",
+    "plaintext_header_bytes": 16,
+    "plaintext_header_hex": "5414f5ee1001013204000000b005e00d",
+    "unknown_04_hex": "0x32010110",
+    "unknown_04_source_note": "TitaniaPy README/RESEARCH_POST: 'likely format version, not firmware version'; identical across FW 14.00 and 14.10 test files",
+    "unknown_08": 4,
+    "flags": 0,
+    "unknown_0B": 0,
+    "header_size": 1456,
+    "header_size_hex": "0x5B0",
+    "hash_size": 3552,
+    "hash_size_hex": "0xDE0",
+    "encrypted_header_blob_size": 5008,
+    "encrypted_header_blob_size_hex": "0x1390",
+    "encrypted_header_blob_size_derivation": "source/decrypt.c: header_size = file_header.unknown_0C + file_header.unknown_0E; blob = 16 plaintext bytes + 0x1390 encrypted bytes",
+    "encrypted_header_blob_range_hex": "0x400-0x1790",
+    "encrypted_extended_header_range_hex": "0x410-0x1790",
+    "encrypted_extended_header_sha256": "a4ad30374f6525e7defc6661d89c53635f755e53a04f55778612add740535708",
+    "extended_header_encrypted": true,
+    "encryption_evidence": {
+      "source": "deepkicks/TitaniaPy RESEARCH_POST.md",
+      "quote_summary": "256 out of 256 bytes differ between FW 14.00 and 14.10 in the encrypted extended header; all encrypted regions 7.15-7.29 bits/byte",
+      "local_measurement": "measured byte-entropy of [0x410,0x1410) = 7.9538 bits/byte; whole embedded image [0x400,0x4B2F8E3D) = 8.0000 bits/byte"
+    },
+    "segment_table": {
+      "expected_location": "inner PUP + 0x20 => absolute 0x420 (inside the encrypted header blob; source/decrypt.c: segments = (pup_segment*)&header_data[0x20])",
+      "record_size_bytes": 32,
+      "record_struct": ["flags u32", "flags2 u32", "offset s64", "compressed_size u64", "uncompressed_size u64"],
+      "parsed": false,
+      "parsed_reason": "segment table is within the encrypted region (0x410-0x1790); requires console-side encsrv_decrypt_header (ioctl 0xC0184402, type=1 for PS5UPDATE1.PUP) which is out of scope and impossible without the non-public Layer-1 key",
+      "segment_count": null,
+      "segment_count_note": "[UNK]; plaintext fields allow only a size estimate: header_size 0x5B0 - 0x20 = 0x590; if the table occupied all of it, 0x590/0x20 = 44.5 records (TitaniaPy states '~44 segments at 32 bytes each')",
+      "segment_flags_semantics_source_cited": {
+        "segment_id": "(flags >> 20) & 0xFFF",
+        "segment_type": "(flags >> 28) & 0xF; 0xE = additional signature segment, 0xF = watermark segment",
+        "compressed": "flags & 0x8",
+        "blocked": "flags & 0x800 (block table present; table segment has flags & 0x1 and matching id)",
+        "table": "flags & 0x1",
+        "block_size": "1 << (((flags & 0xF000) >> 12) + 12)",
+        "block_pointer_mask": "(flags2 & 1) ? 0x1ff : 0xf",
+        "citation": "LightningMods/ps5-pup-decrypt source/decrypt.c + source/pup.py (deepkicks/TitaniaPy) + include/pup.h"
+      }
+    },
+    "segment_names_reference": {
+      "note": "Source-cited id -> filename mapping (from deepkicks/TitaniaPy keys.py, attributed there to psdevwiki). Applies to the ENCRYPTED inner segment table; no segment values were recoverable from this file, so these names are reference-only and are NOT observed in this parse.",
+      "citation": "https://raw.githubusercontent.com/deepkicks/TitaniaPy/main/keys.py",
+      "mapping": {
+        "0x01": "eula.xml",
+        "0x02": "updatemode.self",
+        "0x03": "emc_salina_a.bin",
+        "0x04": "mbr.bin",
+        "0x05": "kernel.bin",
+        "0x06": "unk_06.bin",
+        "0x07": "unk_07.bin",
+        "0x08": "unk_08.bin",
+        "0x09": "unk_09.bin",
+        "0x0A": "CP.bin",
+        "0x0B": "titania.bls",
+        "0x0C": "version_name.xml",
+        "0x0D": "emc_salina_b.bin",
+        "0x0E": "eap_kbl.bin",
+        "0x0F": "bd_firm_info.json",
+        "0x10": "emc_salina_c.bls",
+        "0x11": "floyd_salina_c.bls",
+        "0x12": "usb_pdc_salina_c.bls",
+        "0x14": "emc_salina_d.bls",
+        "0x15": "eap_kbl_2.bin",
+        "0x16": "font.zip",
+        "0x100": "ariel_sec_ldr_a.bin",
+        "0x101": "oberon_sec_ldr_a.bin",
+        "0x102": "oberon_sec_ldr_b.bin",
+        "0x103": "oberon_sec_ldr_c.bin",
+        "0x104": "oberon_sec_ldr_d.bin",
+        "0x105": "oberon_sec_ldr_e.bin",
+        "0x106": "oberon_sec_ldr_f.bin",
+        "0x200": "dev_unk_512.bin",
+        "0x201": "dev_wlanbt.bin",
+        "0x203": "dev_ssd0.system_b",
+        "0x204": "dev_ssd0.system_ex_b",
+        "0x207": "dev_ssd0.preinst"
+      }
+    }
+  },
+  "validation": {
+    "entry_count_matches_file_count": true,
+    "entry_count_source_constraint": "source/decrypt.c rejects file_count < 1 or > 10 (PASS, observed 1)",
+    "all_offsets_in_bounds": true,
+    "entry_data_bounds_check": "[0x400, 0x4B2F8E3D) within [0x0, 0x4B2F9000) (PASS)",
+    "overlaps": [],
+    "gaps": [
+      {
+        "start": 80,
+        "end": 512,
+        "start_hex": "0x50",
+        "end_hex": "0x200",
+        "length": 432,
+        "all_zero": true,
+        "note": "unused bls_entry slots (capacity 10 x 48 bytes starting 0x20; only slot 0 used)"
+      },
+      {
+        "start": 544,
+        "end": 992,
+        "start_hex": "0x220",
+        "end_hex": "0x3E0",
+        "length": 448,
+        "all_zero": true,
+        "note": "zero run between the two 32-byte digest-like fields"
+      },
+      {
+        "start": 1261407805,
+        "end": 1261408256,
+        "start_hex": "0x4B2F8E3D",
+        "end_hex": "0x4B2F9000",
+        "length": 451,
+        "all_zero": true,
+        "note": "tail after entry data end; all bytes 0x00; last nonzero byte of file is 0xB2 at 0x4B2F8E3C"
+      }
+    ],
+    "arithmetic_checks": [
+      "0x400 + 0x4B2F8A3D = 0x4B2F8E3D (entry data end)",
+      "0x4B2F8E3D + 0x1C3 = 0x4B2F9000 (file size)",
+      "block_count 0x2597C8 = 2463688; 2463688 * 512 = 1261408256 = file size"
+    ]
+  },
+  "identifiers_in_file": [
+    {
+      "offset_hex": "0x30",
+      "bytes_hex": "50533555 50444154 45312e50 5550",
+      "ascii": "PS5UPDATE1.PUP",
+      "note": "only plaintext version/name string found; used by console tool to select decryption key type (type 1 = system update; 'PS5UPDATE2.PUP' would be type 0 = recovery)"
+    }
+  ],
+  "firmware_identification": {
+    "identified_as": "PS5 system software update PUP, FW 14.10 (BLS entry size 0x4B2F8A3D, file size 1,261,408,256 bytes)",
+    "confidence": "[INF]",
+    "evidence": "deepkicks/TitaniaPy RESEARCH_POST.md independently lists a FW 14.10 retail PS5UPDATE.PUP with identical size (1,261,408,256 B) and identical BLS entry size (0x4B2F8A3D); also 'Version 3, 1 inner entry (PS5UPDATE1.PUP), offset 0x400'. No plaintext firmware version string exists in this file (version_name.xml is inside the encrypted region).",
+    "tested_against_fw_1400_reference": {"size": 1260600832, "entry_size_hex": "0x4B2339D5", "source": "RESEARCH_POST.md"}
+  },
+  "negative_results_and_coincidences": [
+    "Second 'SLB2' match at 0x58DD5EE is inside encrypted data; its following bytes (43 dc f4 28 ...) are not a valid BLS header (version field would be 0x28F4DC43) => coincidence. Expected count in ~1.26 GB random data is ~0.3 occurrences; observed exactly 1.",
+    "No ELF magic (0x7f454c46) anywhere in file.",
+    "'PS5UPDATE' ASCII occurs exactly once (0x30).",
+    "Second occurrence of 0xEEF51454-LE only at 0x400; a big-endian byte-order match at 0x1D61756D is inside encrypted data (coincidence).",
+    "ASCII run 'posbp=' at 0x4B2F8E10 is inside the encrypted image; consistent with random-data coincidence (printable 6-gram expected millions of times over 1.26 GB).",
+    "Digest-candidate tests for the 32-byte fields at 0x200 and 0x3E0 all negative: sha256 of entry data, entry head64, file regions [0x0,0x200), [0x0,0x3E0), [0x0,0x400), [0x0,0x50), [0x20,0x50), [0x200,0x400), PUP header blob [0x400,0x1790), PUP blob minus 16-byte plaintext, remainder after header blob, whole file; none matched."
+  ],
+  "sources": [
+    {
+      "name": "psdevwiki PS5 'PUP' page (archived copy)",
+      "url": "https://web.archive.org/web/20250110104341id_/https://www.psdevwiki.com/ps5/PUP",
+      "status": "live site returned HTTP 403; archived snapshot used (page last edited 2023-06-10, oldid=1901)",
+      "used_for": "magic 0x00 = 53 4C 42 32 'SLB2'; statement that a 'File table' is at 0x30; segment id list (usb_pdc_salina_c0.bls=18, emc_salina_c0.bls=16, titania.bls=11, eap_kbl.bin=14, mbr.bin=4, oberon_sec_ldr_c0.bin=259, kernel.bin=5, wlanbt.bin=513, ssd0.system_b=515, ssd0.system_ex_b=516, ssd0.preinst=519, bluray.bin=2000)"
+    },
+    {
+      "name": "LightningMods/ps5-pup-decrypt (on-console PUP decrypt tool, C, branch 'master')",
+      "url": "https://github.com/LightningMods/ps5-pup-decrypt",
+      "files_used": [
+        "include/bls.h (bls_header 32B; bls_entry 48B: block_offset u32, size u32, reserved u8[8], name char[32])",
+        "source/checkheaders.c (static asserts: bls_header=32, bls_entry=48, pup_file_header=16, pup_header=32, pup_segment=32, pup_block_info=8)",
+        "source/decrypt.c (magic checks 0x32424C53 / 0xEEF51454; file_count 1..10; reads first 0x400 bytes as BLS header; VerifyBlsHeader over 0x400; offset = block_offset*512; PUP header blob size = unknown_0C+unknown_0E; segment table at header+0x20; segment flag semantics; encsrv ioctl usage)",
+        "include/pup.h (pup structs)"
+      ],
+      "accessed": "2026-10-18"
+    },
+    {
+      "name": "deepkicks/TitaniaPy (PC-side PS5 PUP/BLS parser, Python, branch 'main')",
+      "url": "https://github.com/deepkicks/TitaniaPy",
+      "files_used": [
+        "pup.py (PUP_MAGIC 0xEEF51454; header parse; segment record parse; flag bitfields)",
+        "keys.py (SEGMENT_NAMES id->filename mapping, attributed to psdevwiki)",
+        "RESEARCH_POST.md (FW 14.10 = 1,261,408,256 bytes / entry size 0x4B2F8A3D; FW 14.00 = 1,260,600,832 / 0x4B2339D5; identical plaintext PUP headers 0x32010110 / 0x5B0 / 0xDE0; encrypted extended header (256/256 bytes differ); entropy 7.15-7.29 bits/byte; ioctl 0xC0184402 DecryptHeader type dispatch: PS5UPDATE1.PUP=1, PS5UPDATE2.PUP=0)"
+      ],
+      "accessed": "2026-10-18"
+    }
+  ],
+  "constraints_observed": [
+    "Read-only analysis; no decryption attempted; no key material from consulted sources was used or reproduced.",
+    "No console, network target, or upload was touched; documentation fetch only.",
+    "File was never fully loaded into memory (streamed 4-16 MiB chunks; seek reads <= 0x10000 bytes for headers)."
+  ]
+}
